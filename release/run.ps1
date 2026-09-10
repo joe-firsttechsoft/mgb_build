@@ -1,23 +1,46 @@
 param(
-    [ValidateSet("1-3_SIT", "1-3_UAT", "2-1_SIT", "2-2_SIT")]
+    [ValidateSet("1-3_SIT", "UAT", "2-1_SIT", "2-2_SIT", "2-3_SIT")]
     [string]$BranchType
 )
 
 # 若未傳入參數，以互動選單詢問
 if (-not $BranchType) {
+    # 取得目前 mgbfep repo 的 branch，用於預設選項
+    $UserNameEarly = [System.Environment]::UserName
+    $RepoPathEarly = if ($IsWindows) { "C:\Users\$UserNameEarly\Repo\idea_clone\mgbfep" } else { "/Users/$UserNameEarly/Repo/idea_clone/mgbfep" }
+    $CurrentGitBranch = (git -C $RepoPathEarly rev-parse --abbrev-ref HEAD 2>$null).Trim()
+
+    # branch 名稱 → BranchType 反向對應
+    $GitBranchToType = @{
+        "FEP_1-3_SIT"   = "1-3_SIT"
+        "FEP_1-3-2_UAT" = "UAT"
+        "FEP_2-1"       = "2-1_SIT"
+        "FEP_2-2"       = "2-2_SIT"
+        "FEP_2-3"       = "2-3_SIT"
+    }
+    $CurrentBranchType = $GitBranchToType[$CurrentGitBranch]
+
     Write-Host ""
     Write-Host " 請選擇 Branch："
     Write-Host " [1] FEP_1-3_SIT"
-    Write-Host " [2] FEP_1-3_UAT"
-    Write-Host " [3] FEP_2-1_SIT"
-    Write-Host " [4] FEP_2-2_SIT"
-    $branchInput = Read-Host " 請輸入 [1/2/3/4]（預設 1）"
+    Write-Host " [2] FEP_2-1"
+    Write-Host " [3] FEP_2-2"
+    Write-Host " [4] FEP_2-3"
+    Write-Host " [5] UAT（當前：$CurrentGitBranch）"
+    if ($CurrentBranchType) {
+        Write-Host " [Enter] 當前：$CurrentGitBranch（預設）" -ForegroundColor Cyan
+    }
+    $branchInput = Read-Host " 請輸入選項"
     $BranchType = switch ($branchInput.Trim()) {
         "1"  { "1-3_SIT" }
-        ""   { "1-3_SIT" }
-        "2"  { "1-3_UAT" }
-        "3"  { "2-1_SIT" }
-        "4"  { "2-2_SIT" }
+        "2"  { "2-1_SIT" }
+        "3"  { "2-2_SIT" }
+        "4"  { "2-3_SIT" }
+        "5"  { "UAT" }
+        ""   {
+            if ($CurrentBranchType) { $CurrentBranchType }
+            else { Write-Host " ❌ 無法判斷目前 branch，請手動輸入選項" -ForegroundColor Red; exit 1 }
+        }
         default { Write-Host " ❌ 無效選項：$branchInput" -ForegroundColor Red; exit 1 }
     }
 }
@@ -67,9 +90,10 @@ $env:COPYFILE_DISABLE = "1"
 
 $GitBranch = switch ($BranchType) {
     "1-3_SIT" { "FEP_1-3_SIT" }
-    "1-3_UAT" { "FEP_1-3_UAT" }
+    "UAT"     { "FEP_1-3-2_UAT" }
     "2-1_SIT" { "FEP_2-1" }
     "2-2_SIT" { "FEP_2-2" }
+    "2-3_SIT" { "FEP_2-3" }
 }
 
 # 依平台選擇對應的 .env（路徑格式不同，Windows/macOS 分開維護）
@@ -175,7 +199,7 @@ if ($pullChoice -ieq "S") {
 $step3Choice = "S"
 $skipCommit  = $true
 
-if ($BranchType -like '*_UAT') {
+if ($BranchType -eq 'UAT') {
     Write-Host ""
     Write-Host "[3-5/7] UAT 模式 → 略過 SharePoint 讀取 / release note 更新 / git commit"
 } else {
@@ -468,7 +492,7 @@ if ($skipBuild) {
     Write-Host " 輸出路徑 : $OutputPath"
     Write-Host ""
 
-    if ($BranchType -like '*_UAT') {
+    if ($BranchType -eq 'UAT') {
         # UAT：直接全 build，選 BUILD_MODE
         Write-Host " UAT 模式：全 build"
         $BuildMode = Select-BuildMode -Current $BuildMode
@@ -585,7 +609,7 @@ if ($skipBuild) {
     } else {
         # 建立時間戳資料夾：build-output/<Branch>/yyyyMMddHHmm[-all]/
         $timestamp      = Get-Date -Format "yyyyMMddHHmm"
-        $folderName     = if (-not $BuildModules -and $BranchType -notlike '*_UAT') { "${timestamp}-all" } else { $timestamp }
+        $folderName     = if (-not $BuildModules -and $BranchType -ne 'UAT') { "${timestamp}-all" } else { $timestamp }
         $BuildOutputDir = Join-Path (Split-Path $OutputPath -Parent) "build-output"
         $DeployPath     = Join-Path $BuildOutputDir $GitBranch $folderName
         $FepAppPath     = Join-Path $DeployPath "fep-app"
@@ -714,9 +738,10 @@ Read-Host " 確認無誤後按 Enter 繼續，或按 Ctrl+C 中止"
 # =============================================
 $ConfigFolder = switch ($BranchType) {
     "1-3_SIT" { Join-Path $RepoPath "source" "SIT套config" }
-    "1-3_UAT" { Join-Path $RepoPath "source" "UAT套config" }
-    "2-1_SIT" { Join-Path $RepoPath "source" "SIT套config" }  # TODO: 確認 2-1 是否有獨立 config 資料夾
-    "2-2_SIT" { Join-Path $RepoPath "source" "SIT套config" }  # TODO: 確認 2-2 是否有獨立 config 資料夾
+    "UAT"     { Join-Path $RepoPath "source" "UAT套config" }
+    "2-1_SIT" { Join-Path $RepoPath "source" "SIT套config" }
+    "2-2_SIT" { Join-Path $RepoPath "source" "SIT套config" }
+    "2-3_SIT" { Join-Path $RepoPath "source" "SIT套config" }
 }
 
 Write-Host ""

@@ -9,8 +9,8 @@
 ```
 FEP包版/
 ├── release/
-│   ├── run.ps1                   # 主流程腳本（8 步驟互動式）
-│   ├── fetch_release_script.py   # 從 SharePoint 下載 release note script
+│   ├── run.ps1                   # 主流程腳本（7 步驟互動式）
+│   ├── fetch_release_script.py   # 從 SharePoint 下載 release note script 及模組清單
 │   ├── UpdateReleaseNote.py      # 將 script 寫入 fep-release-note 原始碼
 │   └── myenv/                    # Python venv（每台機器各自建立，不入版）
 ├── docker-build/
@@ -76,29 +76,58 @@ python -m venv myenv
 cd release
 .\run.ps1
 
-# 直接指定 branch（略過選單）
+# 直接指定 branch type（略過選單）
 .\run.ps1 -BranchType 1-3_SIT   # FEP_1-3_SIT
-.\run.ps1 -BranchType 1-3_UAT   # FEP_1-3_UAT
+.\run.ps1 -BranchType UAT       # UAT 過版流程
 .\run.ps1 -BranchType 2-1_SIT   # FEP_2-1
 .\run.ps1 -BranchType 2-2_SIT   # FEP_2-2
+.\run.ps1 -BranchType 2-3_SIT   # FEP_2-3
 ```
 
 ---
 
-## 流程說明（8 步驟）
+## 流程說明（7 步驟）
 
 ```
-[1/8] git reset             → 清空未 commit 變更（顯示 diff 後可選擇是否執行，避免下一步 checkout 失敗）
-[2/8] git checkout / pull   → 切換到目標 branch，並更新最新程式碼（pull 可略過）
-[3/8] SharePoint → txt      → 從 SharePoint Excel 下載 release note script（UAT 略過）
-[4/8] 更新 release note     → 將 script 寫入原始碼（UAT 略過）
-[5/8] git commit            → commit release note 變更（UAT 略過）
-[6/8] 清空輸出資料夾        → 準備存放產出物
-[7/8] Maven 建置            → Docker 或 Native build（見下方）
-[8/8] 解壓縮 & 提示 Config  → 解開 bin tar.gz，提醒套用 config
+[1/7] git reset             → 清空未 commit 變更（顯示 diff 後可選擇是否執行，避免下一步 checkout 失敗）
+[2/7] git checkout / pull   → 切換到目標 branch，並更新最新程式碼（pull 可略過）
+[3/7] SharePoint → txt      → 從 SharePoint Excel 下載 release note script 及模組清單（UAT 略過）
+[4/7] 更新 release note     → 將 script 寫入原始碼（UAT 略過）
+[5/7] git commit            → commit release note 變更（UAT 略過）
+[6/7] Maven 建置            → Docker 或 Native build（見下方）
+[7/7] 整理產出物            → 解壓 tar.gz、複製 war / jar 至 build-output 資料夾
 ```
 
-每個步驟可個別略過（輸入 `S`），失敗時可選擇繼續或中止。
+每個步驟可個別略過（輸入 `S`），失敗時可選擇繼續或中止。  
+[6/7] 略過時，[7/7] 自動連帶略過。
+
+---
+
+## Branch 選單
+
+啟動時自動讀取目前 mgbfep repo 的 HEAD branch，顯示為預設選項（直接按 Enter 選取）。
+
+```
+ 請選擇 Branch：
+ [1] FEP_1-3_SIT
+ [2] FEP_2-1
+ [3] FEP_2-2
+ [4] FEP_2-3
+ [5] UAT（當前：FEP_1-3-2_UAT）
+ [Enter] 當前：FEP_2-2（預設）
+```
+
+---
+
+## 支援的 Branch
+
+| BranchType | Git Branch | 適用 |
+|------------|------------|------|
+| `1-3_SIT`  | `FEP_1-3_SIT` | SIT 過版 |
+| `2-1_SIT`  | `FEP_2-1` | SIT 過版 |
+| `2-2_SIT`  | `FEP_2-2` | SIT 過版 |
+| `2-3_SIT`  | `FEP_2-3` | SIT 過版 |
+| `UAT`      | `FEP_1-3-2_UAT` | UAT 過版 |
 
 ---
 
@@ -116,13 +145,13 @@ Maven : 3.9.6（container 內建）
 **Windows 注意**：Docker 掛載 Windows 路徑時會經過 WSL2 橋接，I/O 較慢。  
 Maven cache（`.m2`）改用 Docker named volume `fep-m2-cache`，住在 Linux 層避免橋接開銷。
 
-首次使用會詢問是否將本機 `C:\Users\<你>\\.m2` 複製至 volume（約 1~2 分鐘），  
+首次使用會詢問是否將本機 `C:\Users\<你>\.m2` 複製至 volume（約 1~2 分鐘），  
 之後每次 build 不需重新下載依賴（約 2.5 GB）。
 
 ### Native build（Windows 限定）
 
 直接呼叫本機 `mvn`，**無 WSL2 I/O 開銷，速度顯著較快**。  
-步驟 7 在 Windows 下會提示選擇 `[N] Native` 或 `[D] Docker`（預設 N）。
+步驟 6 在 Windows 下會提示選擇 `[N] Native` 或 `[D] Docker`（預設 N）。
 
 設定本機 Java / Maven 路徑（`.env.windows`）：
 
@@ -145,19 +174,35 @@ MAVEN_HOME=C:\tools\apache-maven-3.9.6
 | `-safeaa` | 僅 safeaa core | — |
 | （空白）| 完整建置，僅 JAR | JAR |
 
-SIT 模式會依 release note 偵測模組，自動建議**部分 build** 縮短建置時間；  
+SIT 模式會依 release note 偵測模組，提供 **[A] 全 build** 或 **[B] 部分 build** 選擇；  
 UAT 模式固定全 build，手動選擇 `BUILD_MODE`。
 
 ---
 
-## 支援的 Branch
+## 產出物整理（[7/7]）
 
-| 選項 | Branch 名稱 | 適用 |
-|------|-------------|------|
-| `1-3_SIT` | `FEP_1-3_SIT` | SIT 過版 |
-| `1-3_UAT` | `FEP_1-3_UAT` | UAT 過版 |
-| `2-1_SIT` | `FEP_2-1` | SIT 過版（2-1 版本）|
-| `2-2_SIT` | `FEP_2-2` | SIT 過版（2-2 版本）|
+產出物收集至與 `output/` 同層的 `build-output/` 資料夾，結構如下：
+
+```
+build-output/
+└── <Git Branch>/
+    └── yyyyMMddHHmm/          # 部分 build
+    └── yyyyMMddHHmm-all/      # 全 build（SIT 選 A）
+        ├── fep-app/           # war / jar 複製目的地
+        │   ├── fep-web.war
+        │   └── fep-batch-task-*.jar
+        └── fep-app/           # tar.gz 解壓目的地（內含 fep-app/ 路徑）
+            ├── fep-server-atm/
+            └── fep-batch-cmdline/
+```
+
+模組清單由 [3/7] 從 SharePoint Excel `SIT UAT待過版` sheet 的 H / I 欄讀取，輸出為 `BuildModuleData.json`（不入版）。
+
+| H 欄值 | 行為 |
+|--------|------|
+| `fep-web` | 複製 `fep-web.war` 至 `fep-app/` |
+| `fep-batch-task` | 複製 I 欄 `fep-batch-task-*` jar 至 `fep-app/` |
+| 其他服務 | 解壓對應 bin tar.gz |
 
 ---
 
