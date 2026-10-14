@@ -153,33 +153,34 @@ def get_max_item_number(text):
 
 def renumber_items(content, start=1):
     """
-    將內容中的序號行依序重新編號，從 start 開始。
-    行首 數字. 一律視為序號（有無空格皆可），輸出統一補空格。
+    將內容重新編號並對齊，項次從 start 開始。
+    - 行首 數字. 一律視為序號（有無空格皆可），依序重新編號，輸出統一補一個空格。
+    - 沒帶序號的行是上一個項次的延續行：先扣掉原本序號標記寬度的縮排，
+      再縮排對齊到新序號之後（例如 "3. " 就補 3 個空格、"10. " 補 4 個）。
+    - 整個欄位都沒有序號時，整個欄位算一個項次（第一行補序號，其餘行對齊），
+      不會每一行各自變成一個項次。
+    - 空行保持空行。
     """
-    lines = content.split('\n')
+    marker = re.compile(r'^(\d+)\.\s*')
     counter = start
+    indent = ''
+    strip_width = 0
+    started = False
     result = []
-    for line in lines:
-        m = re.match(r'^(\d+)\.\s*(.*)', line)
-        if m:
-            result.append(f"{counter}. {m.group(2)}")
+    for line in content.split('\n'):
+        m = marker.match(line)
+        if m or (not started and line.strip()):
+            label = f"{counter}. "
+            result.append(label + (line[m.end():] if m else line))
+            indent = ' ' * len(label)
+            strip_width = m.end() if m else 0
             counter += 1
+            started = True
+        elif line.strip():
+            leading = len(line) - len(line.lstrip(' '))
+            result.append(indent + line[min(leading, strip_width):])
         else:
-            result.append(line)
-    return '\n'.join(result)
-
-def normalize_items(content):
-    """
-    將未帶序號的非空行補上佔位序號，讓 renumber_items 能統一重新編號。
-    行首 數字. 一律視為已有序號（有無空格皆可），不重複補加。
-    """
-    lines = content.split('\n')
-    result = []
-    for line in lines:
-        if line.strip() and not re.match(r'^\d+\.', line):
-            result.append(f"1. {line}")
-        else:
-            result.append(line)
+            result.append('')
     return '\n'.join(result)
 
 def increment_last_version_number(version_str):
@@ -241,7 +242,7 @@ def update_release_notes(base_path, fileList, LastReleaseDate, LastReleaseVer, L
         # 插入邏輯
         if release_date and release_ver:
             # 換日：插入在第一行後，項次從 1 開始
-            numbered_content = renumber_items(normalize_items(newContent), start=1)
+            numbered_content = renumber_items(newContent, start=1)
             updated_lines = []
             updated_lines.append(lines[0])
             updated_lines.append(release_date)
@@ -256,7 +257,7 @@ def update_release_notes(base_path, fileList, LastReleaseDate, LastReleaseVer, L
                     break
                 today_lines.append(line)
             last_num = get_max_item_number('\n'.join(today_lines))
-            numbered_content = renumber_items(normalize_items(newContent), start=last_num + 1)
+            numbered_content = renumber_items(newContent, start=last_num + 1)
 
             updated_lines = []
             inserted = False
