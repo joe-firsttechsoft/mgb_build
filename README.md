@@ -196,12 +196,12 @@ build-output/
             └── fep-batch-cmdline/
 ```
 
-模組清單由 [3/7] 從 SharePoint Excel `SIT UAT待過版` sheet 的 H / I 欄讀取，輸出為 `BuildModuleData.json`（不入版）。
+模組清單由 [3/7] 從 SharePoint Excel `SIT UAT待過版` sheet 的 I / J 欄讀取，輸出為 `BuildModuleData.json`（不入版）。
 
-| H 欄值 | 行為 |
+| I 欄值 | 行為 |
 |--------|------|
 | `fep-web` | 複製 `fep-web.war` 至 `fep-app/` |
-| `fep-batch-task` | 複製 I 欄 `fep-batch-task-*` jar 至 `fep-app/` |
+| `fep-batch-task` | 複製 J 欄 `fep-batch-task-*` jar 至 `fep-app/` |
 | 其他服務 | 解壓對應 bin tar.gz |
 
 ---

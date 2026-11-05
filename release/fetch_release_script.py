@@ -82,9 +82,9 @@ BRANCH_KEYWORD = {
     "2-1_SIT": ["P2-1 SIT"],
     "2-2_SIT": ["P2-2 SIT"],
 }
-COL_V = 21  # V 欄（0-indexed）
-COL_H = 7   # H 欄（0-indexed）— 服務/模組名稱
-COL_I = 8   # I 欄（0-indexed）— jar 檔名
+COL_V = 24  # Y 欄（0-indexed）— 更新版號 Script（新增 PROD 欄 G/R/V 後由 V 右移至 Y）
+COL_H = 8   # I 欄（0-indexed）— 服務/模組名稱
+COL_I = 9   # J 欄（0-indexed）— jar 檔名
 
 # branch type → (SIT 起始關鍵字, UAT 結束關鍵字) 的列範圍定義
 # 取得範圍：A 欄 == SIT 關鍵字 的列（含）→ A 欄 == UAT 關鍵字 的列（不含）
@@ -103,7 +103,7 @@ BRANCH_MODULE_RANGES = {
 
 def read_module_data(file_bytes, branch_type):
     """
-    從 SIT UAT待過版 sheet 讀取 H 欄（服務）和 I 欄（jar 檔名）。
+    從 SIT UAT待過版 sheet 讀取 I 欄（服務）和 J 欄（jar 檔名）。
     依分支對應的列範圍（SIT 起始列含、UAT 結束列不含）篩選後去重回傳。
     """
     if branch_type not in BRANCH_MODULE_RANGES:
@@ -163,7 +163,7 @@ def fetch_excel():
     return response.content
 
 def read_script(file_bytes, branch_type):
-    """搜尋 A 欄找到各關鍵字的列，讀取 V 欄文字後合併回傳"""
+    """搜尋 A 欄找到各關鍵字的列，讀取 Y 欄文字後合併回傳"""
     keywords = BRANCH_KEYWORD[branch_type]
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=SHEET_NAME, header=None)
     col_a = df.iloc[:, 0].astype(str).str.strip()
@@ -220,8 +220,8 @@ def main():
     print(f"✅ 已寫入 {output_file}：")
     print(script)
 
-    # 讀取 H / I 欄模組資料並輸出 BuildModuleData.json
-    print(f"\n    讀取 {branch_type} 模組清單（H / I 欄）...")
+    # 讀取 I / J 欄模組資料並輸出 BuildModuleData.json
+    print(f"\n    讀取 {branch_type} 模組清單（I / J 欄）...")
     module_data = read_module_data(file_bytes, branch_type)
     print(f"    服務：{module_data['services']}")
     print(f"    Batch JAR：{module_data['batch_jars']}")

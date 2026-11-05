@@ -625,15 +625,15 @@ if ($skipBuild) {
             $moduleData = Get-Content $moduleDataFile -Raw | ConvertFrom-Json
             $Services   = @($moduleData.services)
             $BatchJars  = @($moduleData.batch_jars)
-            Write-Host " 服務清單（H 欄）：$($Services -join ', ')"
-            Write-Host " Batch JAR（I 欄）：$($BatchJars -join ', ')"
+            Write-Host " 服務清單（I 欄）：$($Services -join ', ')"
+            Write-Host " Batch JAR（J 欄）：$($BatchJars -join ', ')"
         } else {
             Write-Host " ⚠️  找不到 BuildModuleData.json，將解壓全部 bin tar.gz" -ForegroundColor Yellow
         }
         Write-Host ""
 
         if ($BuildModules) {
-            # 部分 build：依 H 欄服務清單整理
+            # 部分 build：依 I 欄服務清單整理
             if ($Services.Count -gt 0) {
                 foreach ($service in $Services) {
                     if ($service -eq "fep-web") {
@@ -646,7 +646,7 @@ if ($skipBuild) {
                             Write-Host " ⚠️  找不到 fep-web.war" -ForegroundColor Yellow
                         }
                     } elseif ($service -eq "fep-batch-task") {
-                        # fep-batch-task：無 tar.gz，僅複製 I 欄 fep-batch-task- 開頭的 jar 到 fep-app/
+                        # fep-batch-task：無 tar.gz，僅複製 J 欄 fep-batch-task- 開頭的 jar 到 fep-app/
                         foreach ($jar in ($BatchJars | Where-Object { $_ -like 'fep-batch-task-*' })) {
                             $jarFile = Get-ChildItem $OutputPath -Filter $jar -ErrorAction SilentlyContinue | Select-Object -First 1
                             if ($jarFile) {
