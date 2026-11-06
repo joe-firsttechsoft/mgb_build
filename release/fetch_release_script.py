@@ -82,9 +82,26 @@ BRANCH_KEYWORD = {
     "2-1_SIT": ["P2-1 SIT"],
     "2-2_SIT": ["P2-2 SIT"],
 }
-COL_V = 24  # Y 欄（0-indexed）— 更新版號 Script（新增 PROD 欄 G/R/V 後由 V 右移至 Y）
-COL_H = 8   # I 欄（0-indexed）— 服務/模組名稱
-COL_I = 9   # J 欄（0-indexed）— jar 檔名
+# 表格中途會被插入欄位（例如在 UAT 右側加 PROD），欄位位置不能寫死，
+# 改用第 1 列的表頭文字（完全比對）找出欄位
+HEADER_SERVICE = "服務"            # 服務/模組名稱
+HEADER_JAR = "變更jar檔案"          # jar 檔名
+HEADER_SCRIPT = "更新版號Script"    # 更新版號 Script / release note
+
+def find_columns(df):
+    """從第 1 列表頭找出三個欄位的位置（0-indexed）；找不到或重複就直接結束，不猜。"""
+    header = df.iloc[0].astype(str).str.strip()
+    cols = {}
+    for name in (HEADER_SERVICE, HEADER_JAR, HEADER_SCRIPT):
+        found = header[header == name].index.tolist()
+        if len(found) != 1:
+            print(f"❌ 第 1 列表頭找到 {len(found)} 個「{name}」（應該剛好 1 個），"
+                  f"表格欄位可能被改名或調整，請確認 SharePoint「{SHEET_NAME}」表頭")
+            sys.exit(1)
+        cols[name] = found[0]
+    print(f"    欄位位置：{HEADER_SERVICE}=第 {cols[HEADER_SERVICE] + 1} 欄、"
+          f"{HEADER_JAR}=第 {cols[HEADER_JAR] + 1} 欄、{HEADER_SCRIPT}=第 {cols[HEADER_SCRIPT] + 1} 欄")
+    return cols
 
 # branch type → (SIT 起始關鍵字, UAT 結束關鍵字) 的列範圍定義
 # 取得範圍：A 欄 == SIT 關鍵字 的列（含）→ A 欄 == UAT 關鍵字 的列（不含）
@@ -103,13 +120,15 @@ BRANCH_MODULE_RANGES = {
 
 def read_module_data(file_bytes, branch_type):
     """
-    從 SIT UAT待過版 sheet 讀取 I 欄（服務）和 J 欄（jar 檔名）。
+    從 SIT UAT待過版 sheet 讀取「服務」欄和「變更jar檔案」欄。
     依分支對應的列範圍（SIT 起始列含、UAT 結束列不含）篩選後去重回傳。
     """
     if branch_type not in BRANCH_MODULE_RANGES:
         return {"services": [], "batch_jars": []}
 
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=SHEET_NAME, header=None)
+    cols = find_columns(df)
+    col_service, col_jar = cols[HEADER_SERVICE], cols[HEADER_JAR]
     col_a = df.iloc[:, 0].astype(str).str.strip()
 
     services_raw = []
@@ -134,8 +153,8 @@ def read_module_data(file_bytes, branch_type):
         print(f"    [{start_kw}] 第 {start_row + 1} 列 → [{end_kw}] 第 {end_row + 1} 列（不含）")
 
         for idx in range(start_row, end_row):
-            h_val = str(df.iloc[idx, COL_H]).strip()
-            i_val = str(df.iloc[idx, COL_I]).strip()
+            h_val = str(df.iloc[idx, col_service]).strip()
+            i_val = str(df.iloc[idx, col_jar]).strip()
             if h_val and h_val.lower() != 'nan':
                 for part in h_val.splitlines():
                     part = part.strip().lower()
@@ -163,9 +182,10 @@ def fetch_excel():
     return response.content
 
 def read_script(file_bytes, branch_type):
-    """搜尋 A 欄找到各關鍵字的列，讀取 Y 欄文字後合併回傳"""
+    """搜尋 A 欄找到各關鍵字的列，讀取「更新版號Script」欄文字後合併回傳"""
     keywords = BRANCH_KEYWORD[branch_type]
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=SHEET_NAME, header=None)
+    col_script = find_columns(df)[HEADER_SCRIPT]
     col_a = df.iloc[:, 0].astype(str).str.strip()
 
     scripts = []
@@ -176,7 +196,7 @@ def read_script(file_bytes, branch_type):
             return ""
         row = matched.index[0]
         print(f"    找到「{keyword}」於第 {row + 1} 列")
-        value = df.iloc[row, COL_V]
+        value = df.iloc[row, col_script]
         text = str(value).strip() if pd.notna(value) else ""
         if text:
             scripts.append(text)
